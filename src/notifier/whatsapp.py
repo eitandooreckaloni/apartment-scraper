@@ -15,6 +15,11 @@ from ..storage.database import session_scope
 logger = structlog.get_logger()
 
 
+class TwilioDailyLimitExceeded(Exception):
+    """Raised when the Twilio account hits its daily message limit (HTTP 429)."""
+    pass
+
+
 class WhatsAppNotifier:
     """Sends apartment notifications via WhatsApp using Twilio."""
     
@@ -160,6 +165,12 @@ class WhatsAppNotifier:
                     error_message=str(e)
                 )
                 session.add(log)
+            
+            # If Twilio daily limit hit (HTTP 429), raise to stop the scraper
+            if e.status == 429:
+                raise TwilioDailyLimitExceeded(
+                    "Twilio daily message limit exceeded. Stopping scraper."
+                ) from e
             
             return False
     
