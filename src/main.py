@@ -4,6 +4,7 @@ import asyncio
 import signal
 import sys
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -20,6 +21,10 @@ from .logging_config import (
     setup_logging, get_logger,
     print_status, print_success, print_error, print_warning
 )
+
+# Type alias for any scraper's RawPost (they all have the same structure)
+if TYPE_CHECKING:
+    from .scraper.facebook_apify import RawPost as ApifyRawPost
 
 # Configure dual logging (human console + debug file)
 logger = setup_logging()
@@ -98,42 +103,85 @@ async def process_post(post: RawPost) -> bool:
     return False
 
 
+def _get_facebook_scraper():
+    """Get the appropriate Facebook scraper based on configuration."""
+    scraper_type = config.facebook_scraper_type
+    
+    if scraper_type == "apify":
+        from .scraper.facebook_apify import ApifyFacebookScraper
+        return ApifyFacebookScraper()
+    elif scraper_type == "playwright":
+        from .scraper.facebook_playwright import FacebookScraper
+        return FacebookScraper()
+    else:  # "library" or default
+        from .scraper.facebook import FacebookScraper
+        return FacebookScraper()
+
+
 async def run_scrape_job():
     """Run a single scrape job."""
     print_status("Starting scan...")
     logger.info("Starting scrape job")
     start_time = datetime.utcnow()
     
-    scraper = Yad2Scraper()
+    all_posts = []
     total_posts = 0
     notifications_sent = 0
     new_listings = 0
     
-    try:
-        await scraper.start()
-        posts = await scraper.scrape_listings()
-        total_posts = len(posts)
+    # Scrape from Yad2 if enabled
+    if config.yad2_enabled:
+        print_status("Scanning Yad2...")
+        logger.info("Scraping Yad2")
+        yad2_scraper = Yad2Scraper()
+        try:
+            await yad2_scraper.start()
+            yad2_posts = await yad2_scraper.scrape_listings()
+            all_posts.extend(yad2_posts)
+            print_status(f"  Yad2: {len(yad2_posts)} listings")
+            logger.info(f"Yad2 returned {len(yad2_posts)} listings")
+        except Exception as e:
+            print_error(f"Yad2 scan failed: {str(e)[:50]}")
+            logger.error("Yad2 scrape failed", error=str(e))
+        finally:
+            await yad2_scraper.stop()
+    
+    # Scrape from Facebook if enabled
+    if config.facebook_enabled:
+        scraper_type = config.facebook_scraper_type
+        print_status(f"Scanning Facebook ({scraper_type})...")
+        logger.info(f"Scraping Facebook using {scraper_type}")
         
-        if total_posts > 0:
-            print_status(f"Processing {total_posts} listings...")
-            logger.info(f"Scraped {total_posts} listings, processing...")
-            
-            for i, post in enumerate(posts, 1):
-                try:
-                    if await process_post(post):
-                        notifications_sent += 1
-                        new_listings += 1
-                except Exception as e:
-                    logger.error("Error processing listing", error=str(e), post_id=post.post_id)
-                    continue
-        else:
-            print_warning("No listings found")
+        fb_scraper = _get_facebook_scraper()
+        try:
+            await fb_scraper.start()
+            fb_posts = await fb_scraper.scrape_all_groups()
+            all_posts.extend(fb_posts)
+            print_status(f"  Facebook: {len(fb_posts)} posts")
+            logger.info(f"Facebook returned {len(fb_posts)} posts")
+        except Exception as e:
+            print_error(f"Facebook scan failed: {str(e)[:50]}")
+            logger.error("Facebook scrape failed", error=str(e))
+        finally:
+            await fb_scraper.stop()
+    
+    total_posts = len(all_posts)
+    
+    # Process all collected posts
+    if total_posts > 0:
+        print_status(f"Processing {total_posts} listings...")
+        logger.info(f"Scraped {total_posts} total listings, processing...")
         
-    except Exception as e:
-        print_error(f"Scan failed: {str(e)}")
-        logger.error("Scrape job failed", error=str(e))
-    finally:
-        await scraper.stop()
+        for i, post in enumerate(all_posts, 1):
+            try:
+                if await process_post(post):
+                    notifications_sent += 1
+                    new_listings += 1
+            except Exception as e:
+                logger.error("Error processing listing", error=str(e), post_id=post.post_id)
+                continue
+    else:
+        print_warning("No listings found from any source")
     
     elapsed = (datetime.utcnow() - start_time).total_seconds()
     
@@ -164,7 +212,7 @@ def setup_scheduler() -> AsyncIOScheduler:
         run_scrape_job,
         trigger=IntervalTrigger(minutes=config.scraper_interval_minutes),
         id="scrape_job",
-        name="Yad2 Apartment Scraper",
+        name="Apartment Scraper",
         replace_existing=True,
         max_instances=1,  # Prevent overlapping runs
     )
@@ -184,7 +232,21 @@ async def main():
     # Show configuration in human-friendly format
     print_status(f"Budget: {config.budget_min:,} - {config.budget_max:,} NIS")
     print_status(f"Rooms: {config.rooms_min} - {config.rooms_max}")
-    print_status(f"Source: Yad2 (cities: {config.yad2_cities})")
+    
+    # Show enabled sources
+    sources = []
+    if config.yad2_enabled:
+        sources.append(f"Yad2 (cities: {config.yad2_cities})")
+    if config.facebook_enabled:
+        fb_type = config.facebook_scraper_type
+        fb_groups = len(config.facebook_groups)
+        sources.append(f"Facebook/{fb_type} ({fb_groups} groups)")
+    
+    if sources:
+        print_status(f"Sources: {', '.join(sources)}")
+    else:
+        print_warning("No sources enabled!")
+    
     print_status(f"Will scan every {config.scraper_interval_minutes} minutes")
     print("")
     
@@ -192,7 +254,8 @@ async def main():
     logger.info(f"Scrape interval: {config.scraper_interval_minutes} minutes")
     logger.info(f"Budget range: {config.budget_min} - {config.budget_max} NIS")
     logger.info(f"Rooms range: {config.rooms_min} - {config.rooms_max}")
-    logger.info(f"Yad2 cities: {config.yad2_cities}")
+    logger.info(f"Yad2 enabled: {config.yad2_enabled}, cities: {config.yad2_cities}")
+    logger.info(f"Facebook enabled: {config.facebook_enabled}, type: {config.facebook_scraper_type}")
     
     # Initialize database
     init_db()

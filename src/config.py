@@ -66,6 +66,11 @@ class Config:
     def log_level(self) -> str:
         return os.getenv("LOG_LEVEL", "INFO")
     
+    @property
+    def apify_api_token(self) -> str:
+        """Apify API token for Facebook scraping via Apify."""
+        return os.getenv("APIFY_API_TOKEN", "")
+    
     # Scraper settings
     @property
     def scraper_interval_minutes(self) -> int:
@@ -165,7 +170,7 @@ class Config:
     
     @property
     def facebook_scraper_type(self) -> str:
-        """Facebook scraper type: 'library' (HTTP-based) or 'playwright' (browser automation)."""
+        """Facebook scraper type: 'apify', 'library' (HTTP-based), or 'playwright' (browser automation)."""
         return self._config.get("facebook", {}).get("scraper_type", "library")
     
     @property
@@ -176,6 +181,21 @@ class Config:
     def auto_join_groups(self) -> bool:
         """Whether to automatically join Facebook groups that the user isn't a member of."""
         return self._config["facebook"].get("auto_join_groups", True)
+    
+    @property
+    def facebook_apify_actor_id(self) -> str:
+        """Apify actor ID for Facebook Posts Scraper."""
+        return self._config.get("facebook", {}).get("apify", {}).get("actor_id", "zanTWNqB3Poz44qdY")
+    
+    @property
+    def facebook_apify_max_posts(self) -> int:
+        """Maximum posts to fetch per group via Apify."""
+        return self._config.get("facebook", {}).get("apify", {}).get("max_posts_per_group", 20)
+    
+    @property
+    def facebook_apify_timeout(self) -> int:
+        """Timeout in seconds for Apify actor run."""
+        return self._config.get("facebook", {}).get("apify", {}).get("timeout_seconds", 120)
     
     # Parsing settings
     @property

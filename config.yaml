@@ -92,13 +92,23 @@ yad2:
   #   max: 3
 
 facebook:
-  # Facebook scraping is disabled by default (violates ToS, gets blocked)
-  enabled: false
+  # Facebook scraping via Apify
+  enabled: true
 
-  # Scraper type: "library" (lightweight HTTP-based) or "playwright" (browser automation)
-  # "library" is faster and less detectable, but requires exported cookies
-  # "playwright" is more robust but heavier and more detectable
-  scraper_type: "library"
+  # Scraper type: "apify" (recommended), "library" (HTTP-based), or "playwright" (browser automation)
+  # "apify" - Uses Apify's Facebook Posts Scraper actor (costs ~$0.05/run, most reliable)
+  # "library" - Lightweight HTTP-based, requires exported cookies
+  # "playwright" - Browser automation, heavier and more detectable
+  scraper_type: "apify"
+
+  # Apify settings (only used when scraper_type is "apify")
+  apify:
+    # Actor ID for Facebook Posts Scraper
+    actor_id: "zanTWNqB3Poz44qdY"
+    # Maximum posts to fetch per group
+    max_posts_per_group: 20
+    # Timeout for actor run in seconds
+    timeout_seconds: 120
 
   # Automatically join groups that you're not a member of
   # Set to false if you want to manually join groups first
