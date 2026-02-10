@@ -71,7 +71,31 @@ criteria:
     - penthouse
     - פנטהאוז
 
+yad2:
+  # Enable Yad2 scraping (recommended - legal and structured data)
+  enabled: true
+  
+  # City codes (5000 = Tel Aviv, 3000 = Jerusalem, 4000 = Haifa)
+  # See full list at https://www.yad2.co.il
+  cities:
+    - 5000  # Tel Aviv
+  
+  # Property type filter (optional)
+  # Options: apartment, studio, penthouse, garden_apartment, townhouse, duplex
+  # property_type: apartment
+  
+  # Additional filters (these override the global criteria if set)
+  # price:
+  #   min: 3000
+  #   max: 7500
+  # rooms:
+  #   min: 2
+  #   max: 3
+
 facebook:
+  # Facebook scraping is disabled by default (violates ToS, gets blocked)
+  enabled: false
+  
   # Automatically join groups that you're not a member of
   # Set to false if you want to manually join groups first
   auto_join_groups: true

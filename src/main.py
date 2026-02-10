@@ -12,7 +12,7 @@ from .config import config
 from .storage.database import init_db, session_scope
 from .storage.dedup import is_duplicate, generate_listing_hash
 from .storage.models import Listing, Group
-from .scraper.facebook import FacebookScraper, RawPost
+from .scraper.yad2 import Yad2Scraper, RawPost
 from .parser.hybrid import parse_listing
 from .filters.criteria import matches_criteria, should_notify
 from .notifier.whatsapp import send_listing_notification
@@ -104,19 +104,19 @@ async def run_scrape_job():
     logger.info("Starting scrape job")
     start_time = datetime.utcnow()
     
-    scraper = FacebookScraper()
+    scraper = Yad2Scraper()
     total_posts = 0
     notifications_sent = 0
     new_listings = 0
     
     try:
         await scraper.start()
-        posts = await scraper.scrape_all_groups()
+        posts = await scraper.scrape_listings()
         total_posts = len(posts)
         
         if total_posts > 0:
-            print_status(f"Processing {total_posts} posts...")
-            logger.info(f"Scraped {total_posts} posts, processing...")
+            print_status(f"Processing {total_posts} listings...")
+            logger.info(f"Scraped {total_posts} listings, processing...")
             
             for i, post in enumerate(posts, 1):
                 try:
@@ -124,10 +124,10 @@ async def run_scrape_job():
                         notifications_sent += 1
                         new_listings += 1
                 except Exception as e:
-                    logger.error("Error processing post", error=str(e), post_id=post.post_id)
+                    logger.error("Error processing listing", error=str(e), post_id=post.post_id)
                     continue
         else:
-            print_warning("No posts found in any groups")
+            print_warning("No listings found")
         
     except Exception as e:
         print_error(f"Scan failed: {str(e)}")
@@ -164,7 +164,7 @@ def setup_scheduler() -> AsyncIOScheduler:
         run_scrape_job,
         trigger=IntervalTrigger(minutes=config.scraper_interval_minutes),
         id="scrape_job",
-        name="Facebook Group Scraper",
+        name="Yad2 Apartment Scraper",
         replace_existing=True,
         max_instances=1,  # Prevent overlapping runs
     )
@@ -184,7 +184,7 @@ async def main():
     # Show configuration in human-friendly format
     print_status(f"Budget: {config.budget_min:,} - {config.budget_max:,} NIS")
     print_status(f"Rooms: {config.rooms_min} - {config.rooms_max}")
-    print_status(f"Monitoring {len(config.facebook_groups)} Facebook groups")
+    print_status(f"Source: Yad2 (cities: {config.yad2_cities})")
     print_status(f"Will scan every {config.scraper_interval_minutes} minutes")
     print("")
     
@@ -192,7 +192,7 @@ async def main():
     logger.info(f"Scrape interval: {config.scraper_interval_minutes} minutes")
     logger.info(f"Budget range: {config.budget_min} - {config.budget_max} NIS")
     logger.info(f"Rooms range: {config.rooms_min} - {config.rooms_max}")
-    logger.info(f"Groups to monitor: {len(config.facebook_groups)}")
+    logger.info(f"Yad2 cities: {config.yad2_cities}")
     
     # Initialize database
     init_db()

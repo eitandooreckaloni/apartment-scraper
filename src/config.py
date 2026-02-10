@@ -19,19 +19,6 @@ def load_config() -> dict[str, Any]:
     config_path = PROJECT_ROOT / "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
-    
-    # #region agent log
-    import json as _json
-    from datetime import datetime as _dt
-    _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
-    # Log the loaded group names to verify YAML parsing
-    _groups = config_data.get("facebook", {}).get("groups", [])
-    _group_names = [g.get("name", "") for g in _groups]
-    _group_name_bytes = [n.encode('utf-8').hex() for n in _group_names]
-    with open(_debug_log_path, "a", encoding="utf-8") as _f:
-        _f.write(_json.dumps({"hypothesisId": "H2", "location": "config.py:load_config", "message": "Config loaded from YAML", "data": {"group_names": _group_names, "group_name_bytes_hex": _group_name_bytes}, "timestamp": int(_dt.now().timestamp() * 1000)}, ensure_ascii=False) + "\n")
-    # #endregion
-    
     return config_data
 
 
@@ -130,7 +117,52 @@ class Config:
         """Get bonus feature keywords to look for (e.g., roof, balcony)."""
         return self._config["criteria"].get("bonus_features", [])
     
+    # Yad2 settings
+    @property
+    def yad2_enabled(self) -> bool:
+        """Whether Yad2 scraping is enabled."""
+        return self._config.get("yad2", {}).get("enabled", True)
+    
+    @property
+    def yad2_cities(self) -> list[int]:
+        """Yad2 city codes to search (5000 = Tel Aviv)."""
+        return self._config.get("yad2", {}).get("cities", [5000])
+    
+    @property
+    def yad2_property_type(self) -> str | None:
+        """Property type filter for Yad2."""
+        return self._config.get("yad2", {}).get("property_type")
+    
+    @property
+    def yad2_price_min(self) -> int:
+        """Min price for Yad2 (falls back to global budget)."""
+        yad2_price = self._config.get("yad2", {}).get("price", {})
+        return yad2_price.get("min", self.budget_min)
+    
+    @property
+    def yad2_price_max(self) -> int:
+        """Max price for Yad2 (falls back to global budget)."""
+        yad2_price = self._config.get("yad2", {}).get("price", {})
+        return yad2_price.get("max", self.budget_max)
+    
+    @property
+    def yad2_rooms_min(self) -> float:
+        """Min rooms for Yad2 (falls back to global rooms)."""
+        yad2_rooms = self._config.get("yad2", {}).get("rooms", {})
+        return yad2_rooms.get("min", self.rooms_min)
+    
+    @property
+    def yad2_rooms_max(self) -> float:
+        """Max rooms for Yad2 (falls back to global rooms)."""
+        yad2_rooms = self._config.get("yad2", {}).get("rooms", {})
+        return yad2_rooms.get("max", self.rooms_max)
+    
     # Facebook settings
+    @property
+    def facebook_enabled(self) -> bool:
+        """Whether Facebook scraping is enabled (disabled by default)."""
+        return self._config.get("facebook", {}).get("enabled", False)
+    
     @property
     def facebook_groups(self) -> list[dict[str, str]]:
         return self._config["facebook"]["groups"]

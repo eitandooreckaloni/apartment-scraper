@@ -345,16 +345,6 @@ def get_logger(name: Optional[str] = None):
 # Simple human-readable print functions for key events
 def print_status(message: str):
     """Print a simple status message to console."""
-    # #region agent log
-    import json as _json
-    _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
-    # Check if message contains Hebrew (RTL) characters
-    _has_hebrew = any('\u0590' <= c <= '\u05FF' for c in message)
-    _char_codes = [hex(ord(c)) for c in message[:50]] if len(message) <= 50 else [hex(ord(c)) for c in message[:50]]
-    _bytes_repr = message.encode('utf-8').hex() if len(message) < 100 else message[:100].encode('utf-8').hex()
-    with open(_debug_log_path, "a", encoding="utf-8") as _f:
-        _f.write(_json.dumps({"hypothesisId": "H1-H4", "location": "logging_config.py:print_status:entry", "message": "print_status called", "data": {"raw_message": message, "has_hebrew": _has_hebrew, "char_codes_sample": _char_codes, "bytes_hex": _bytes_repr, "message_length": len(message)}, "timestamp": int(datetime.now().timestamp() * 1000)}, ensure_ascii=False) + "\n")
-    # #endregion
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"\033[2m[{timestamp}]\033[0m {message}", flush=True)
 
