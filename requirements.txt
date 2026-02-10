@@ -12,6 +12,9 @@ apscheduler==3.10.4
 # WhatsApp notifications
 twilio==8.13.0
 
+# Web framework
+flask==3.0.2
+
 # AI parsing
 openai==1.12.0
 
