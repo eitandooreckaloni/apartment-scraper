@@ -111,6 +111,11 @@ class Config:
     def listing_type(self) -> str:
         return self._config["criteria"]["listing_type"]
     
+    @property
+    def bonus_features(self) -> list[str]:
+        """Get bonus feature keywords to look for (e.g., roof, balcony)."""
+        return self._config["criteria"].get("bonus_features", [])
+    
     # Facebook groups
     @property
     def facebook_groups(self) -> list[dict[str, str]]:

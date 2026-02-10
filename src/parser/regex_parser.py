@@ -6,6 +6,8 @@ from typing import Optional
 
 import structlog
 
+from ..config import config
+
 logger = structlog.get_logger()
 
 
@@ -55,6 +57,7 @@ class RegexParseResult:
     rooms: Optional[float] = None
     is_roommates: Optional[bool] = None
     contact_info: Optional[str] = None
+    bonus_features: list[str] = field(default_factory=list)
     confidence: float = 0.0
     matched_fields: list[str] = field(default_factory=list)
 
@@ -205,6 +208,45 @@ def extract_contact_info(text: str) -> tuple[Optional[str], float]:
     return None, 0.0
 
 
+def extract_bonus_features(text: str) -> list[str]:
+    """Extract bonus features from text based on configured keywords.
+    
+    Returns a list of matched feature categories (deduplicated).
+    """
+    bonus_keywords = config.bonus_features
+    if not bonus_keywords:
+        return []
+    
+    text_lower = text.lower()
+    found_features = set()
+    
+    # Group keywords by feature type for cleaner output
+    feature_groups = {
+        "rooftop": ["roof", "גג", "rooftop"],
+        "balcony": ["balcony", "מרפסת", "terrace", "טרסה"],
+        "big windows": ["big windows", "חלונות גדולים", "windows", "חלונות"],
+        "penthouse": ["penthouse", "פנטהאוז"],
+    }
+    
+    for keyword in bonus_keywords:
+        keyword_lower = keyword.lower()
+        if keyword_lower in text_lower:
+            # Find which feature group this belongs to
+            matched_group = None
+            for group_name, group_keywords in feature_groups.items():
+                if keyword_lower in [k.lower() for k in group_keywords]:
+                    matched_group = group_name
+                    break
+            
+            if matched_group:
+                found_features.add(matched_group)
+            else:
+                # Add as-is if not in a known group
+                found_features.add(keyword)
+    
+    return list(found_features)
+
+
 def parse_with_regex(text: str) -> RegexParseResult:
     """Parse apartment listing using regex patterns.
     
@@ -243,6 +285,12 @@ def parse_with_regex(text: str) -> RegexParseResult:
         result.contact_info = contact
         result.matched_fields.append("contact")
         confidences.append(contact_conf)
+    
+    # Extract bonus features
+    bonus = extract_bonus_features(text)
+    if bonus:
+        result.bonus_features = bonus
+        result.matched_fields.append("bonus_features")
     
     # Calculate overall confidence
     if confidences:

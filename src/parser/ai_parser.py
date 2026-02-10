@@ -20,8 +20,13 @@ class AIParseResult:
     rooms: Optional[float] = None
     is_roommates: Optional[bool] = None
     contact_info: Optional[str] = None
+    bonus_features: list[str] = None  # Features like rooftop, balcony, big windows
     confidence: float = 0.9  # AI parsing generally high confidence
     summary: Optional[str] = None  # Brief summary of the listing
+    
+    def __post_init__(self):
+        if self.bonus_features is None:
+            self.bonus_features = []
 
 
 SYSTEM_PROMPT = """You are an expert at parsing Hebrew apartment rental listings from Facebook groups in Tel Aviv.
@@ -32,12 +37,13 @@ Extract the following information from the listing:
 - rooms: Number of rooms (can be decimal like 2.5 or 3.5)
 - is_roommates: true if looking for roommates/subletting a room, false if renting entire apartment
 - contact_info: Phone number if present
+- bonus_features: Array of special features mentioned. Look for: rooftop/גג, balcony/מרפסת, big windows/חלונות גדולים, terrace/טרסה, penthouse/פנטהאוז, high ceilings, renovated, bright apartment, view
 - summary: A brief 1-sentence summary in English
 
-Return ONLY valid JSON with these fields. Use null for fields you can't determine.
+Return ONLY valid JSON with these fields. Use null for fields you can't determine, and [] for bonus_features if none found.
 
 Example output:
-{"price": 5500, "location": "florentin", "rooms": 2.5, "is_roommates": false, "contact_info": "0501234567", "summary": "2.5 room apartment in Florentin for 5500 NIS"}"""
+{"price": 5500, "location": "florentin", "rooms": 2.5, "is_roommates": false, "contact_info": "0501234567", "bonus_features": ["balcony", "rooftop"], "summary": "2.5 room apartment in Florentin for 5500 NIS with rooftop access"}"""
 
 
 def parse_with_ai(text: str) -> Optional[AIParseResult]:
@@ -76,6 +82,7 @@ def parse_with_ai(text: str) -> Optional[AIParseResult]:
             rooms=data.get("rooms"),
             is_roommates=data.get("is_roommates"),
             contact_info=data.get("contact_info"),
+            bonus_features=data.get("bonus_features", []),
             summary=data.get("summary")
         )
         

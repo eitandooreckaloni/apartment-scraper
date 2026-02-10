@@ -51,7 +51,17 @@ class WhatsAppNotifier:
     
     def _format_message(self, listing: Listing, parsed: ParsedListing) -> str:
         """Format a WhatsApp message for a listing."""
-        lines = ["🏠 *New Apartment Found!*", ""]
+        # Check if this listing has bonus features for special header
+        has_bonus = parsed.has_bonus_features()
+        
+        if has_bonus:
+            lines = ["✨🏠 *EXCITING Apartment Found!* 🏠✨", ""]
+            # Highlight bonus features at the top
+            features_display = ", ".join(f.title() for f in parsed.bonus_features)
+            lines.append(f"⭐ *Special Features:* {features_display}")
+            lines.append("")
+        else:
+            lines = ["🏠 *New Apartment Found!*", ""]
         
         # Price
         if parsed.price:

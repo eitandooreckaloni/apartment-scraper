@@ -39,6 +39,9 @@ class Listing(Base):
     # Images stored as JSON array
     _images: Mapped[Optional[str]] = mapped_column("images", Text, nullable=True)
     
+    # Bonus features (rooftop, balcony, etc.) stored as JSON array
+    _bonus_features: Mapped[Optional[str]] = mapped_column("bonus_features", Text, nullable=True)
+    
     # Parsing metadata
     parse_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     parsed_by: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 'regex' or 'ai'
@@ -63,6 +66,22 @@ class Listing(Base):
     def images(self, value: list[str]):
         """Set images from a list."""
         self._images = json.dumps(value) if value else None
+    
+    @property
+    def bonus_features(self) -> list[str]:
+        """Get bonus features as a list."""
+        if self._bonus_features:
+            return json.loads(self._bonus_features)
+        return []
+    
+    @bonus_features.setter
+    def bonus_features(self, value: list[str]):
+        """Set bonus features from a list."""
+        self._bonus_features = json.dumps(value) if value else None
+    
+    def has_bonus_features(self) -> bool:
+        """Check if this listing has any bonus features."""
+        return len(self.bonus_features) > 0
     
     def __repr__(self) -> str:
         return f"<Listing {self.id[:8]}... price={self.parsed_price} location={self.parsed_location}>"

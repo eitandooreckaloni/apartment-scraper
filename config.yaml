@@ -19,39 +19,57 @@ criteria:
   # Budget range in NIS per month
   budget:
     min: 3000
-    max: 7000
+    max: 7500
   
   # Tel Aviv neighborhoods to look for (Hebrew and English)
-  # Add or remove based on your preferences
+  # Focused on Lev Tel Aviv - south of Bugrashov
   locations:
-    - florentin
-    - פלורנטין
-    - neve tzedek
-    - נווה צדק
-    - kerem hatemanim
-    - כרם התימנים
-    - lev hair
-    - לב העיר
     - rothschild
     - רוטשילד
-    - dizengoff
-    - דיזנגוף
-    - basel
-    - בזל
-    - old north
-    - צפון הישן
-    - new north
-    - צפון חדש
-    - ramat aviv
-    - רמת אביב
+    - kerem hatemanim
+    - כרם התימנים
+    - הכרם
+    - shenkin
+    - שנקין
+    - lev hair
+    - לב העיר
+    - lev tel aviv
+    - לב תל אביב
+    - neve tzedek
+    - נווה צדק
+    - florentin
+    - פלורנטין
+    - carmel market
+    - שוק הכרמל
+    - allenby
+    - אלנבי
+    - nachalat binyamin
+    - נחלת בנימין
   
   # Number of rooms (use decimals for half rooms, e.g., 2.5)
   rooms:
     min: 2
-    max: 4
+    max: 3
   
   # Type of listing: 'whole_apartment', 'roommates', or 'both'
   listing_type: whole_apartment
+  
+  # Bonus features - apartments with these get highlighted as extra exciting
+  # (Hebrew and English keywords to look for)
+  bonus_features:
+    - roof
+    - גג
+    - rooftop
+    - balcony
+    - מרפסת
+    - big windows
+    - חלונות גדולים
+    - windows
+    - חלונות
+    - terrace
+    - טרסה
+    - penthouse
+    - פנטהאוז
 
 facebook:
   # Facebook groups to monitor

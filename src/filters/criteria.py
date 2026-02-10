@@ -17,6 +17,8 @@ class FilterResult:
     matches: bool
     reasons: list[str] = field(default_factory=list)
     score: float = 0.0  # 0-1, how well it matches
+    bonus_features: list[str] = field(default_factory=list)  # Exciting features found
+    has_bonus: bool = False  # Quick check if has any bonus features
 
 
 def normalize_location(location: str) -> str:
@@ -111,6 +113,14 @@ def matches_criteria(listing: ParsedListing) -> FilterResult:
         result.reasons.append("Listing type not determined")
         score_components.append(0.5)
     
+    # Check for bonus features (doesn't affect matching, but boosts score)
+    if listing.bonus_features:
+        result.bonus_features = listing.bonus_features
+        result.has_bonus = True
+        result.reasons.append(f"✨ Bonus features found: {', '.join(listing.bonus_features)}")
+        # Boost score for listings with bonus features
+        score_components.append(1.2)  # Slight boost above 1.0
+    
     # Calculate final score
     if score_components:
         result.score = sum(score_components) / len(score_components)
@@ -119,6 +129,8 @@ def matches_criteria(listing: ParsedListing) -> FilterResult:
         "Criteria check complete",
         matches=result.matches,
         score=result.score,
+        has_bonus=result.has_bonus,
+        bonus_features=result.bonus_features,
         reasons=result.reasons
     )
     

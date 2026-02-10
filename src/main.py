@@ -74,6 +74,7 @@ async def process_post(post: RawPost) -> bool:
             posted_at=post.posted_at,
         )
         listing.images = post.images
+        listing.bonus_features = parsed.bonus_features
         
         # Check criteria
         filter_result = matches_criteria(parsed)

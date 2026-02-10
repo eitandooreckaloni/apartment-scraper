@@ -1,6 +1,6 @@
 """Hybrid parser that combines regex and AI parsing."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import structlog
@@ -20,6 +20,7 @@ class ParsedListing:
     rooms: Optional[float] = None
     is_roommates: Optional[bool] = None
     contact_info: Optional[str] = None
+    bonus_features: list[str] = field(default_factory=list)
     confidence: float = 0.0
     parsed_by: str = "unknown"  # 'regex', 'ai', or 'hybrid'
     summary: Optional[str] = None
@@ -28,6 +29,10 @@ class ParsedListing:
         """Check if we have enough info to consider this a valid listing."""
         # Need at least price or (location and rooms)
         return self.price is not None or (self.location is not None and self.rooms is not None)
+    
+    def has_bonus_features(self) -> bool:
+        """Check if this listing has any bonus features."""
+        return len(self.bonus_features) > 0
 
 
 def merge_results(regex_result: RegexParseResult, ai_result: Optional[AIParseResult]) -> ParsedListing:
@@ -40,6 +45,7 @@ def merge_results(regex_result: RegexParseResult, ai_result: Optional[AIParseRes
     result.rooms = regex_result.rooms
     result.is_roommates = regex_result.is_roommates
     result.contact_info = regex_result.contact_info
+    result.bonus_features = list(regex_result.bonus_features)  # Copy the list
     result.confidence = regex_result.confidence
     result.parsed_by = "regex"
     
@@ -55,6 +61,14 @@ def merge_results(regex_result: RegexParseResult, ai_result: Optional[AIParseRes
             result.is_roommates = ai_result.is_roommates
         if result.contact_info is None and ai_result.contact_info:
             result.contact_info = ai_result.contact_info
+        
+        # Merge bonus features from AI (combine both sources, deduplicated)
+        if ai_result.bonus_features:
+            existing = set(f.lower() for f in result.bonus_features)
+            for feature in ai_result.bonus_features:
+                if feature.lower() not in existing:
+                    result.bonus_features.append(feature)
+                    existing.add(feature.lower())
         
         result.summary = ai_result.summary
         
@@ -112,6 +126,7 @@ def parse_listing(text: str) -> ParsedListing:
         location=final_result.location,
         rooms=final_result.rooms,
         is_roommates=final_result.is_roommates,
+        bonus_features=final_result.bonus_features,
         confidence=final_result.confidence,
         parsed_by=final_result.parsed_by
     )

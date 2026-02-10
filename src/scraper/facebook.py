@@ -16,6 +16,15 @@ from ..config import config
 
 logger = structlog.get_logger()
 
+# #region agent log
+import time as _dbg_time
+_DBG_LOG_PATH = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+def _dbg_log(loc, msg, data=None, hyp=None):
+    import json as _j
+    payload = {"location": loc, "message": msg, "data": data or {}, "hypothesisId": hyp, "timestamp": int(_dbg_time.time()*1000)}
+    with open(_DBG_LOG_PATH, "a") as f: f.write(_j.dumps(payload) + "\n")
+# #endregion
+
 
 @dataclass
 class RawPost:
@@ -86,22 +95,40 @@ class FacebookScraper:
     async def _check_login_status(self) -> bool:
         """Check if we're logged into Facebook."""
         try:
+            # #region agent log
+            _dbg_log("facebook.py:_check_login_status:start", "Starting login status check", {"url": "https://www.facebook.com"}, "B")
+            # #endregion
             await self.page.goto("https://www.facebook.com", wait_until="networkidle")
             await self._random_delay(2, 4)
+            
+            # #region agent log
+            current_url = self.page.url
+            page_title = await self.page.title()
+            _dbg_log("facebook.py:_check_login_status:after_nav", "After navigation to facebook.com", {"current_url": current_url, "page_title": page_title}, "B")
+            # #endregion
             
             # Check for login form or user menu
             login_form = await self.page.query_selector('input[name="email"]')
             if login_form:
                 self._logged_in = False
                 logger.info("Not logged in - need to authenticate")
+                # #region agent log
+                _dbg_log("facebook.py:_check_login_status:not_logged_in", "Login form detected - not logged in", {}, "B")
+                # #endregion
                 return False
             
             self._logged_in = True
             logger.info("Already logged in")
+            # #region agent log
+            _dbg_log("facebook.py:_check_login_status:logged_in", "No login form - appears logged in", {}, "B")
+            # #endregion
             return True
             
         except Exception as e:
             logger.error("Error checking login status", error=str(e))
+            # #region agent log
+            _dbg_log("facebook.py:_check_login_status:error", "Error during login check", {"error": str(e)}, "B")
+            # #endregion
             return False
     
     async def login(self) -> bool:
@@ -178,8 +205,52 @@ class FacebookScraper:
         posts = []
         
         try:
-            # Navigate to group
-            await self.page.goto(group_url, wait_until="networkidle")
+            # #region agent log
+            _dbg_log("facebook.py:scrape_group:before_nav", "About to navigate to group", {"group_url": group_url, "group_name": group_name, "logged_in": self._logged_in}, "A,E")
+            nav_start = _dbg_time.time()
+            # #endregion
+            
+            # Navigate to group - use domcontentloaded instead of networkidle to avoid timeout
+            # Then wait for network to settle separately with a shorter timeout
+            try:
+                await self.page.goto(group_url, wait_until="domcontentloaded", timeout=30000)
+                # #region agent log
+                after_dom = _dbg_time.time()
+                _dbg_log("facebook.py:scrape_group:dom_loaded", "DOM content loaded", {"elapsed_ms": int((after_dom - nav_start)*1000), "current_url": self.page.url}, "A")
+                # #endregion
+                
+                # Now wait a bit for dynamic content, but don't wait for full networkidle
+                await asyncio.sleep(3)
+                
+                # #region agent log
+                current_url = self.page.url
+                page_title = await self.page.title()
+                _dbg_log("facebook.py:scrape_group:after_sleep", "After 3s wait", {"current_url": current_url, "page_title": page_title, "total_elapsed_ms": int((_dbg_time.time() - nav_start)*1000)}, "A,B,C")
+                # #endregion
+                
+                # Check for blocking dialogs/modals (cookie consent, login redirect, captcha)
+                # #region agent log
+                dialog_selectors = [
+                    '[data-testid="cookie-policy-manage-dialog"]',
+                    '[role="dialog"]',
+                    'input[name="email"]',  # Login form
+                    '[id*="captcha"]',
+                    '[id*="checkpoint"]'
+                ]
+                found_dialogs = []
+                for sel in dialog_selectors:
+                    elem = await self.page.query_selector(sel)
+                    if elem:
+                        found_dialogs.append(sel)
+                _dbg_log("facebook.py:scrape_group:dialog_check", "Checked for blocking elements", {"found_dialogs": found_dialogs, "current_url": current_url}, "C,D")
+                # #endregion
+                
+            except Exception as nav_error:
+                # #region agent log
+                _dbg_log("facebook.py:scrape_group:nav_error", "Navigation error", {"error": str(nav_error), "type": type(nav_error).__name__, "elapsed_ms": int((_dbg_time.time() - nav_start)*1000)}, "A,E")
+                # #endregion
+                raise
+            
             await self._random_delay()
             
             # Scroll to load more posts
@@ -201,9 +272,15 @@ class FacebookScraper:
                     continue
             
             logger.info(f"Extracted {len(posts)} posts from {group_name}")
+            # #region agent log
+            _dbg_log("facebook.py:scrape_group:success", "Successfully extracted posts", {"group_name": group_name, "post_count": len(posts)}, "A")
+            # #endregion
             
         except Exception as e:
             logger.error("Error scraping group", group_name=group_name, error=str(e))
+            # #region agent log
+            _dbg_log("facebook.py:scrape_group:error", "Error scraping group", {"group_name": group_name, "error": str(e), "error_type": type(e).__name__}, "A,B,C,D,E")
+            # #endregion
         
         return posts
     
