@@ -1,28 +1,30 @@
 [Unit]
-Description=Tel Aviv Apartment Scraper
+Description=Tel Aviv Apartment Scraper (auto-updating)
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/apartment-scraper
-ExecStart=/opt/apartment-scraper/venv/bin/python -m src.main
+ExecStart=/bin/bash /opt/apartment-scraper/deploy/auto-update-runner.sh
 Restart=always
 RestartSec=10
 
 # Environment
 Environment=PYTHONUNBUFFERED=1
+# How often (seconds) to check Git for updates (default: 300 = 5 min)
+Environment=UPDATE_CHECK_INTERVAL=300
+Environment=GIT_BRANCH=main
 
 # Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=apartment-scraper
 
-# Security
+# Security — relaxed to allow git operations
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/apartment-scraper/data
+ProtectSystem=false
+ReadWritePaths=/opt/apartment-scraper
 
 [Install]
 WantedBy=multi-user.target

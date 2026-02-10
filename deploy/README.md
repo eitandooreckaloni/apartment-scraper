@@ -95,7 +95,42 @@ The first time you run the scraper, you may need to handle Facebook's security c
    - Complete any 2FA/security checks
    - Copy the `data/session/` folder to your VPS
 
-## Updating
+## Auto-Updating
+
+The scraper runs inside an **auto-update runner** that handles updates automatically:
+
+1. On startup it does a `git pull` and installs any new dependencies
+2. Every 5 minutes (configurable) it checks the remote for new commits
+3. If an update is found it gracefully stops the scraper, pulls the new code, installs dependencies, and restarts
+
+This means you just need to `git push` your changes and the Hostinger instance will pick them up within a few minutes — no SSH required.
+
+### Configuration
+
+You can tune the update behavior via environment variables in the systemd service file:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UPDATE_CHECK_INTERVAL` | `300` | Seconds between Git update checks |
+| `GIT_REMOTE` | `origin` | Git remote name |
+| `GIT_BRANCH` | `main` | Branch to track |
+
+To change these, edit `/etc/systemd/system/apartment-scraper.service` and run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart apartment-scraper
+```
+
+### Manual Update (if needed)
+
+If you want to update manually instead of waiting for the auto-check:
+
+```bash
+sudo systemctl restart apartment-scraper
+```
+
+This will trigger a fresh `git pull` on startup. Or the old-fashioned way:
 
 ```bash
 cd /opt/apartment-scraper
