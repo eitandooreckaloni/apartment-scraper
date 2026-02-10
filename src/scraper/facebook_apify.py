@@ -162,11 +162,10 @@ class ApifyFacebookScraper:
     
     def _run_actor_sync(self, group_urls: list[str]) -> list[dict]:
         """Run the Apify actor synchronously and return results."""
-        # Prepare actor input
+        # Prepare actor input - the Facebook Posts Scraper expects 'pageUrls'
         actor_input = {
-            "startUrls": [{"url": url} for url in group_urls],
+            "pageUrls": group_urls,
             "maxPosts": self.max_posts,
-            "maxPostsPerQuery": self.max_posts,
         }
         
         logger.info("Starting Apify actor run", actor_id=self.actor_id, urls=group_urls)
