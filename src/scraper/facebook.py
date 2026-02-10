@@ -463,6 +463,13 @@ class FacebookScraper:
             group_url = group["url"]
             group_name = group["name"]
             
+            # #region agent log
+            import json as _json
+            _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+            _membership_msg = f"  [{i}/{total_groups}] {group_name}"
+            with open(_debug_log_path, "a", encoding="utf-8") as _f:
+                _f.write(_json.dumps({"hypothesisId": "H1-H3", "location": "facebook.py:ensure_group_memberships", "message": "Printing group membership status", "data": {"group_name": group_name, "formatted_message": _membership_msg, "group_name_bytes": group_name.encode('utf-8').hex()}, "timestamp": int(datetime.now().timestamp() * 1000)}, ensure_ascii=False) + "\n")
+            # #endregion
             print_status(f"  [{i}/{total_groups}] {group_name}")
             logger.info("Processing group", group_name=group_name)
             
@@ -530,6 +537,14 @@ class FacebookScraper:
     
     async def scrape_group(self, group_url: str, group_name: str) -> list[RawPost]:
         """Scrape posts from a Facebook group."""
+        # #region agent log
+        import json as _json
+        _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+        _has_hebrew = any('\u0590' <= c <= '\u05FF' for c in group_name)
+        _formatted_msg = f"Scraping: {group_name}"
+        with open(_debug_log_path, "a", encoding="utf-8") as _f:
+            _f.write(_json.dumps({"hypothesisId": "H1-H3", "location": "facebook.py:scrape_group:before_print", "message": "About to print group name", "data": {"group_name": group_name, "has_hebrew": _has_hebrew, "formatted_message": _formatted_msg, "group_name_bytes": group_name.encode('utf-8').hex()}, "timestamp": int(datetime.now().timestamp() * 1000)}, ensure_ascii=False) + "\n")
+        # #endregion
         print_status(f"Scraping: {group_name}")
         logger.info("Scraping group", group_name=group_name)
         
@@ -541,10 +556,23 @@ class FacebookScraper:
         
         posts = []
         
+        # #region agent log
+        import json as _json
+        _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+        # #endregion
+        
         try:
-            # Navigate to group - use domcontentloaded instead of networkidle to avoid timeout
+            # Build feed URL - append sorting parameter to get chronological feed
+            # This helps bypass "content unavailable" interstitial pages
+            feed_url = group_url.rstrip('/')
+            if '?' not in feed_url:
+                feed_url += '/?sorting_setting=CHRONOLOGICAL'
+            else:
+                feed_url += '&sorting_setting=CHRONOLOGICAL'
+            
+            # Navigate to group feed - use domcontentloaded instead of networkidle to avoid timeout
             try:
-                await self.page.goto(group_url, wait_until="domcontentloaded", timeout=30000)
+                await self.page.goto(feed_url, wait_until="domcontentloaded", timeout=30000)
                 
                 # Wait for dynamic content to load
                 await asyncio.sleep(3)
@@ -552,16 +580,120 @@ class FacebookScraper:
             except Exception as nav_error:
                 raise
             
+            # #region agent log
+            # Post-fix verification: Log current URL and page state after navigation
+            _current_url = self.page.url
+            _page_title = await self.page.title()
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "POST-FIX", "location": "facebook.py:scrape_group:after_nav", "message": "Page state after navigation", "data": {"group_name": group_name, "target_url": feed_url, "current_url": _current_url, "page_title": _page_title}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
+            
+            # Check for "content unavailable" page and try alternate navigation
+            page_text = await self.page.evaluate("() => document.body?.innerText || ''")
+            if "content isn't available" in page_text.lower() or "this content isn't available" in page_text.lower():
+                print_warning(f"  Content blocked - trying alternate URL...")
+                logger.warning("Content unavailable page detected, trying alternate URL", group_name=group_name)
+                
+                # #region agent log
+                with open(_debug_log_path, "a") as _f:
+                    _f.write(_json.dumps({"hypothesisId": "POST-FIX", "location": "facebook.py:scrape_group:content_blocked", "message": "Content unavailable detected, trying alternate", "data": {"group_name": group_name, "blocked_url": feed_url}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+                # #endregion
+                
+                # Try the discussion tab directly
+                discussion_url = group_url.rstrip('/') + '/discussion'
+                await self.page.goto(discussion_url, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(3)
+                
+                # Check again
+                page_text = await self.page.evaluate("() => document.body?.innerText || ''")
+                if "content isn't available" in page_text.lower():
+                    print_error(f"  Cannot access group content - may need to re-authenticate")
+                    logger.error("Group content still unavailable after retry", group_name=group_name)
+                    
+                    # #region agent log
+                    with open(_debug_log_path, "a") as _f:
+                        _f.write(_json.dumps({"hypothesisId": "POST-FIX", "location": "facebook.py:scrape_group:still_blocked", "message": "Content still unavailable after alternate URL", "data": {"group_name": group_name}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+                    # #endregion
+                    return []
+            
             await self._random_delay()
+            
+            # Wait for actual post content to load (not just loading placeholders)
+            # Facebook shows skeleton loaders with aria-label="Loading..." first
+            try:
+                # Wait for at least one element with actual text content to appear
+                await self.page.wait_for_selector(
+                    'div[dir="auto"]:not(:empty)',
+                    timeout=10000
+                )
+            except Exception:
+                logger.warning("Timeout waiting for post content to load", group_name=group_name)
             
             # Scroll to load more posts
             for _ in range(3):  # Scroll a few times
                 await self.page.evaluate("window.scrollBy(0, 1000)")
                 await self._random_delay(1, 2)
             
-            # Extract posts
-            post_elements = await self.page.query_selector_all('[data-pagelet*="FeedUnit"], [role="article"]')
+            # Wait a bit more for lazy-loaded content
+            await asyncio.sleep(2)
+            
+            # Extract posts - look for actual content containers, not loading placeholders
+            # First try the feed unit selector
+            post_elements = await self.page.query_selector_all('[data-pagelet*="FeedUnit"]')
+            
+            # If no feed units found, try role="article" but filter out loading placeholders
+            if not post_elements:
+                all_articles = await self.page.query_selector_all('[role="article"]')
+                post_elements = []
+                for article in all_articles:
+                    # Skip loading placeholders (they have aria-label="Loading..." or data-visualcompletion="loading-state")
+                    is_loading = await article.evaluate('''
+                        el => el.querySelector('[aria-label="Loading..."]') !== null || 
+                              el.querySelector('[data-visualcompletion="loading-state"]') !== null ||
+                              el.getAttribute('aria-label') === 'Loading...'
+                    ''')
+                    if not is_loading:
+                        # Also check if it has actual text content
+                        has_content = await article.evaluate('''
+                            el => {
+                                const textContent = el.innerText || '';
+                                return textContent.trim().length > 50;
+                            }
+                        ''')
+                        if has_content:
+                            post_elements.append(article)
+            
             logger.info(f"Found {len(post_elements)} post elements")
+            
+            # #region agent log
+            # Post-fix: Check what selectors exist on page
+            _selector_checks = {}
+            for _sel in ['[data-pagelet*="FeedUnit"]', '[role="article"]', '[data-pagelet*="Feed"]', 'div[class*="feed"]', 'div[class*="post"]', '[data-pagelet]', 'article']:
+                try:
+                    _els = await self.page.query_selector_all(_sel)
+                    _selector_checks[_sel] = len(_els)
+                except:
+                    _selector_checks[_sel] = -1
+            # Also get sample of data-pagelet values
+            _pagelets = await self.page.evaluate("() => Array.from(document.querySelectorAll('[data-pagelet]')).slice(0,10).map(e => e.getAttribute('data-pagelet'))")
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "POST-FIX", "location": "facebook.py:scrape_group:selector_check", "message": "Selector availability check", "data": {"group_name": group_name, "selector_counts": _selector_checks, "pagelet_values": _pagelets, "post_elements_found": len(post_elements)}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
+            
+            # #region agent log
+            # Post-fix: Check for blocking indicators or login prompts
+            _blocking_indicators = {}
+            for _sel_name, _sel in [("login_form", 'input[name="email"]'), ("checkpoint", '[id*="checkpoint"]'), ("content_unavailable", 'text="Content isn\'t available"'), ("join_button", '[aria-label*="Join"]')]:
+                try:
+                    _el = await self.page.query_selector(_sel)
+                    _blocking_indicators[_sel_name] = _el is not None
+                except:
+                    _blocking_indicators[_sel_name] = "error"
+            # Get some visible text from page to understand content
+            _visible_text = await self.page.evaluate("() => document.body?.innerText?.substring(0, 500) || 'no body'")
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "POST-FIX", "location": "facebook.py:scrape_group:blocking_check", "message": "Blocking indicators check", "data": {"group_name": group_name, "blocking_indicators": _blocking_indicators, "visible_text_sample": _visible_text[:500]}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
             
             for element in post_elements[:config.posts_per_group]:
                 try:
@@ -586,18 +718,93 @@ class FacebookScraper:
     
     async def _extract_post(self, element, group_name: str, group_url: str) -> Optional[RawPost]:
         """Extract data from a single post element."""
+        # #region agent log
+        import json as _json
+        _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+        # #endregion
         try:
-            # Get post content
-            content_el = await element.query_selector('[data-ad-preview="message"], [data-ad-comet-preview="message"]')
-            if not content_el:
-                # Try alternative selectors
-                content_el = await element.query_selector('div[dir="auto"]')
+            # #region agent log
+            # H1/H4: Log element info to understand what we're working with
+            _el_tag = await element.evaluate("el => el.tagName")
+            _el_classes = await element.evaluate("el => el.className?.substring?.(0, 200) || ''")
+            _el_data_pagelet = await element.evaluate("el => el.getAttribute('data-pagelet') || 'none'")
+            _el_role = await element.evaluate("el => el.getAttribute('role') || 'none'")
+            _el_html_sample = await element.evaluate("el => el.innerHTML?.substring(0, 1000) || ''")
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "H4", "location": "facebook.py:_extract_post:element_info", "message": "Post element details", "data": {"group_name": group_name, "tag": _el_tag, "classes": _el_classes[:200], "data_pagelet": _el_data_pagelet, "role": _el_role, "html_sample": _el_html_sample[:1000]}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
             
-            if not content_el:
-                return None
+            # Get post content - try multiple selectors in order of specificity
+            content_selectors = [
+                '[data-ad-preview="message"]',
+                '[data-ad-comet-preview="message"]',
+                'div[dir="auto"][style*="text-align"]',  # Facebook often styles post content this way
+                'div[dir="auto"]',
+            ]
             
-            content = await content_el.inner_text()
-            if not content or len(content) < 20:  # Skip very short posts
+            content_el = None
+            content = None
+            
+            for selector in content_selectors:
+                content_el = await element.query_selector(selector)
+                if content_el:
+                    text = await content_el.inner_text()
+                    if text and len(text.strip()) > 20:
+                        content = text.strip()
+                        break
+            
+            # If no specific content element found, try to extract text from the whole post
+            # but exclude metadata like timestamps, "Like", "Comment", etc.
+            if not content:
+                try:
+                    # Get all text from the article, but try to find the main content area
+                    content = await element.evaluate('''
+                        el => {
+                            // Try to find the main content container
+                            // Look for the largest text block that's not metadata
+                            const allDivs = el.querySelectorAll('div[dir="auto"]');
+                            let bestContent = '';
+                            let maxLength = 0;
+                            
+                            for (const div of allDivs) {
+                                const text = div.innerText?.trim() || '';
+                                // Skip short text (likely buttons/metadata) and skip if it's just "See more"
+                                if (text.length > maxLength && text.length > 20 && !text.match(/^(Like|Comment|Share|See more|\\d+ likes?|\\d+ comments?)$/i)) {
+                                    bestContent = text;
+                                    maxLength = text.length;
+                                }
+                            }
+                            
+                            // If still no content, try getting the post body text
+                            if (!bestContent) {
+                                // Get all text but exclude common metadata patterns
+                                const fullText = el.innerText || '';
+                                const lines = fullText.split('\\n').filter(line => {
+                                    const trimmed = line.trim();
+                                    // Filter out metadata lines
+                                    return trimmed.length > 3 && 
+                                           !trimmed.match(/^(Like|Comment|Share|\\d+[KkMm]?\\s*(likes?|comments?|shares?)|See more|·|hrs?|mins?|\\d+[hm]|Just now)$/i);
+                                });
+                                bestContent = lines.slice(1, 10).join(' ').substring(0, 2000);  // Skip first line (usually author), take up to 2000 chars
+                            }
+                            
+                            return bestContent;
+                        }
+                    ''')
+                except Exception as e:
+                    logger.warning("Error extracting post content via JS", error=str(e))
+            
+            # #region agent log
+            # H2/H3: Log the content that was extracted
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "H2", "location": "facebook.py:_extract_post:content_extracted", "message": "Content extracted from element", "data": {"group_name": group_name, "content_length": len(content) if content else 0, "content_preview": (content[:200] if content else "None/Empty")}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
+            
+            if not content or len(content.strip()) < 20:  # Skip very short posts
+                # #region agent log
+                with open(_debug_log_path, "a") as _f:
+                    _f.write(_json.dumps({"hypothesisId": "H2", "location": "facebook.py:_extract_post:too_short", "message": "Content too short, skipping", "data": {"group_name": group_name, "content_length": len(content) if content else 0, "content": content}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+                # #endregion
                 return None
             
             # Get post URL/ID
@@ -640,6 +847,11 @@ class FacebookScraper:
                 # Facebook often uses relative times, we'd need to parse them
                 pass
             
+            # #region agent log
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "SUCCESS", "location": "facebook.py:_extract_post:success", "message": "Post extracted successfully", "data": {"group_name": group_name, "post_id": post_id, "content_length": len(content), "has_url": bool(post_url), "author": author_name}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
+            
             return RawPost(
                 post_id=post_id,
                 content=content,
@@ -652,6 +864,12 @@ class FacebookScraper:
             )
             
         except Exception as e:
+            # #region agent log
+            # H5: Log actual exception details
+            import traceback as _tb
+            with open(_debug_log_path, "a") as _f:
+                _f.write(_json.dumps({"hypothesisId": "H5", "location": "facebook.py:_extract_post:exception", "message": "Exception during extraction", "data": {"group_name": group_name, "error": str(e), "traceback": _tb.format_exc()}, "timestamp": int(datetime.now().timestamp() * 1000)}) + "\n")
+            # #endregion
             logger.warning("Error extracting post data", error=str(e))
             return None
     

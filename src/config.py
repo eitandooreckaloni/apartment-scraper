@@ -18,7 +18,21 @@ def load_config() -> dict[str, Any]:
     """Load configuration from config.yaml."""
     config_path = PROJECT_ROOT / "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        config_data = yaml.safe_load(f)
+    
+    # #region agent log
+    import json as _json
+    from datetime import datetime as _dt
+    _debug_log_path = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
+    # Log the loaded group names to verify YAML parsing
+    _groups = config_data.get("facebook", {}).get("groups", [])
+    _group_names = [g.get("name", "") for g in _groups]
+    _group_name_bytes = [n.encode('utf-8').hex() for n in _group_names]
+    with open(_debug_log_path, "a", encoding="utf-8") as _f:
+        _f.write(_json.dumps({"hypothesisId": "H2", "location": "config.py:load_config", "message": "Config loaded from YAML", "data": {"group_names": _group_names, "group_name_bytes_hex": _group_name_bytes}, "timestamp": int(_dt.now().timestamp() * 1000)}, ensure_ascii=False) + "\n")
+    # #endregion
+    
+    return config_data
 
 
 class Config:
