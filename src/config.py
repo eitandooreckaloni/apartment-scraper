@@ -67,6 +67,16 @@ class Config:
         return os.getenv("LOG_LEVEL", "INFO")
     
     @property
+    def email_address(self) -> str:
+        """Gmail address for email fallback notifications."""
+        return os.getenv("EMAIL_ADDRESS", "")
+    
+    @property
+    def email_app_password(self) -> str:
+        """Gmail App Password for SMTP authentication."""
+        return os.getenv("EMAIL_APP_PASSWORD", "")
+    
+    @property
     def apify_api_token(self) -> str:
         """Apify API token for Facebook scraping via Apify."""
         return os.getenv("APIFY_API_TOKEN", "")

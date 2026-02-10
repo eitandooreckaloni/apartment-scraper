@@ -16,7 +16,7 @@ from .storage.models import Listing, Group
 from .scraper.yad2 import Yad2Scraper, RawPost
 from .parser.hybrid import parse_listing
 from .filters.criteria import matches_criteria, should_notify
-from .notifier.whatsapp import send_listing_notification, TwilioDailyLimitExceeded
+from .notifier.whatsapp import send_listing_notification
 from .logging_config import (
     setup_logging, get_logger,
     print_status, print_success, print_error, print_warning
@@ -28,9 +28,6 @@ if TYPE_CHECKING:
 
 # Configure dual logging (human console + debug file)
 logger = setup_logging()
-
-# Event flag to signal Twilio daily limit hit — triggers graceful shutdown
-_twilio_limit_hit = asyncio.Event()
 
 
 async def process_post(post: RawPost) -> bool:
@@ -180,11 +177,6 @@ async def run_scrape_job():
                 if await process_post(post):
                     notifications_sent += 1
                     new_listings += 1
-            except TwilioDailyLimitExceeded as e:
-                print_error(str(e))
-                logger.error("Twilio daily limit hit, signalling shutdown")
-                _twilio_limit_hit.set()
-                break
             except Exception as e:
                 logger.error("Error processing listing", error=str(e), post_id=post.post_id)
                 continue
@@ -282,31 +274,16 @@ async def main():
     logger.info("Running initial scrape...")
     await run_scrape_job()
     
-    # Check if Twilio limit was hit during initial scan
-    if _twilio_limit_hit.is_set():
-        print_status("Shutting down due to Twilio daily message limit.")
-        logger.info("Shutting down due to Twilio daily limit")
-        scheduler.shutdown()
-        print_status("Goodbye!")
-        return
-    
     # Show next run info
     next_run = datetime.now().strftime("%H:%M")
     print_status(f"Next scan in {config.scraper_interval_minutes} minutes")
     print_status("Press Ctrl+C to stop")
     print("")
     
-    # Keep running — check for Twilio limit flag each iteration
+    # Keep running
     try:
         while True:
-            await asyncio.sleep(10)
-            if _twilio_limit_hit.is_set():
-                print("")
-                print_status("Shutting down due to Twilio daily message limit.")
-                logger.info("Shutting down due to Twilio daily limit")
-                scheduler.shutdown()
-                print_status("Goodbye!")
-                return
+            await asyncio.sleep(60)
     except (KeyboardInterrupt, SystemExit):
         print("")
         print_status("Shutting down...")

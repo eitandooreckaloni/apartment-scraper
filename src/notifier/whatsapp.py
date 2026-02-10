@@ -1,4 +1,4 @@
-"""WhatsApp notifications via Twilio."""
+"""WhatsApp notifications via Twilio, with automatic email fallback."""
 
 from datetime import datetime, timedelta
 from typing import Optional
@@ -11,20 +11,22 @@ from ..config import config
 from ..parser.hybrid import ParsedListing
 from ..storage.models import NotificationLog, Listing
 from ..storage.database import session_scope
+from .email import EmailNotifier
 
 logger = structlog.get_logger()
 
 
-class TwilioDailyLimitExceeded(Exception):
-    """Raised when the Twilio account hits its daily message limit (HTTP 429)."""
-    pass
-
-
 class WhatsAppNotifier:
-    """Sends apartment notifications via WhatsApp using Twilio."""
+    """Sends apartment notifications via WhatsApp using Twilio.
+    
+    Falls back to email (Gmail SMTP) when the Twilio daily message
+    limit is reached (HTTP 429).
+    """
     
     def __init__(self):
         self.client: Optional[Client] = None
+        self._whatsapp_exhausted: bool = False
+        self._email_notifier: Optional[EmailNotifier] = None
         self._init_client()
     
     def _init_client(self):
@@ -34,6 +36,12 @@ class WhatsAppNotifier:
             logger.info("Twilio client initialized")
         else:
             logger.warning("Twilio credentials not configured")
+    
+    def _get_email_fallback(self) -> EmailNotifier:
+        """Lazy-init the email fallback notifier."""
+        if self._email_notifier is None:
+            self._email_notifier = EmailNotifier()
+        return self._email_notifier
     
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
@@ -109,18 +117,25 @@ class WhatsAppNotifier:
         return "\n".join(lines)
     
     def send_notification(self, listing: Listing, parsed: ParsedListing) -> bool:
-        """Send a WhatsApp notification for a listing.
+        """Send a notification for a listing.
+        
+        Tries WhatsApp first. If the Twilio daily limit has been hit
+        (this session), falls back to email automatically.
         
         Args:
             listing: Database listing record
             parsed: Parsed listing data
         
         Returns:
-            True if sent successfully
+            True if sent successfully (via either channel)
         """
+        # If WhatsApp is exhausted for this session, go straight to email
+        if self._whatsapp_exhausted:
+            return self._send_via_email(listing, parsed)
+        
         if not self.client:
             logger.error("Twilio client not initialized")
-            return False
+            return self._send_via_email(listing, parsed)
         
         if not self._check_rate_limit():
             return False
@@ -166,13 +181,24 @@ class WhatsAppNotifier:
                 )
                 session.add(log)
             
-            # If Twilio daily limit hit (HTTP 429), raise to stop the scraper
+            # If Twilio daily limit hit (HTTP 429), switch to email fallback
             if e.status == 429:
-                raise TwilioDailyLimitExceeded(
-                    "Twilio daily message limit exceeded. Stopping scraper."
-                ) from e
+                logger.warning(
+                    "Twilio daily limit hit — switching to email fallback",
+                    listing_id=listing.id
+                )
+                self._whatsapp_exhausted = True
+                return self._send_via_email(listing, parsed)
             
             return False
+    
+    def _send_via_email(self, listing: Listing, parsed: ParsedListing) -> bool:
+        """Attempt to send via the email fallback."""
+        email = self._get_email_fallback()
+        if not email.available:
+            logger.error("Email fallback not available — notification dropped")
+            return False
+        return email.send_notification(listing, parsed)
     
     def send_test_message(self) -> tuple[bool, str]:
         """Send a test message to verify WhatsApp connection.
