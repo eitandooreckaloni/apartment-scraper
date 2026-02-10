@@ -239,8 +239,13 @@ class Yad2Scraper:
                 continue
         
         if len(feed_items) > 0 and len(listings) == 0:
-            # Log sample of what we got if everything failed
-            logger.warning("All items failed to parse", sample_item=str(feed_items[0])[:500] if feed_items else "empty")
+            # Log sample of what we got if everything failed, including all keys
+            sample = feed_items[0] if feed_items else {}
+            logger.warning(
+                "All items failed to parse", 
+                sample_keys=list(sample.keys()) if isinstance(sample, dict) else "not_dict",
+                sample_item=str(sample)[:800] if sample else "empty"
+            )
         
         return listings
     
@@ -346,11 +351,16 @@ class Yad2Scraper:
         if not isinstance(item, dict):
             return None
             
-        # Skip ads and non-listing items
+        # Skip promotional ads, banners, and non-listing items
+        # Note: Yad2 marks all listings as type='ad', so we only skip specific promo types
         item_type = item.get("type", "")
-        if item_type in ("ad", "banner", "promotion"):
+        if item_type in ("banner", "promotion", "premium_ad"):
             return None
-        if item.get("is_premium_ad") or item.get("isAd") or item.get("promotional_ad"):
+        # Skip actual promotional ads (not regular listings)
+        if item.get("promotional_ad") == 1 or item.get("is_premium_ad"):
+            return None
+        # Skip highlight/featured items that are just ads
+        if item.get("ad_highlight_type") == "banner":
             return None
         
         # Get listing ID from various possible fields
@@ -361,6 +371,20 @@ class Yad2Scraper:
             item.get("itemId", "") or
             item.get("ad_number", "")
         )
+        
+        # Try to extract ID from URL fields if no direct ID found
+        if not listing_id:
+            # Check link/URL fields for ID
+            for url_field in ["external_link", "link", "url", "page_link", "item_link"]:
+                url_val = item.get(url_field, "")
+                if url_val:
+                    # Extract ID from URL like /realestate/item/abc123 or /item/abc123
+                    match = re.search(r'/item/([a-zA-Z0-9_-]+)', str(url_val))
+                    if match:
+                        listing_id = match.group(1)
+                        break
+        
+        # Skip items without an ID
         if not listing_id:
             return None
         
