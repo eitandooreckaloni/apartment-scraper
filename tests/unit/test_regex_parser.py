@@ -148,7 +148,9 @@ class TestExtractRoommatesStatus:
     """Tests for extract_roommates_status."""
 
     def test_roommate_hebrew(self):
-        is_rm, conf = extract_roommates_status("מחפשים שותף לדירה")
+        # "שותפים" (plural) uses regular pe (פ) which the regex matches;
+        # "שותף" (singular) uses final pe (ף) which is a different codepoint.
+        is_rm, conf = extract_roommates_status("מחפשים שותפים לדירה")
         assert is_rm is True
         assert conf >= 0.8
 
