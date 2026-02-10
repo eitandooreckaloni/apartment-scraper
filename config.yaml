@@ -1,0 +1,90 @@
+# Apartment Scraper Configuration
+# Adjust these settings to match your apartment search criteria
+
+scraper:
+  # How often to check for new posts (in minutes)
+  interval_minutes: 7
+  
+  # Random delay range between actions (seconds) - helps avoid detection
+  min_delay: 3
+  max_delay: 8
+  
+  # Number of posts to fetch per group per run
+  posts_per_group: 20
+  
+  # Path to store browser session/cookies
+  session_path: data/session
+
+criteria:
+  # Budget range in NIS per month
+  budget:
+    min: 3000
+    max: 7000
+  
+  # Tel Aviv neighborhoods to look for (Hebrew and English)
+  # Add or remove based on your preferences
+  locations:
+    - florentin
+    - פלורנטין
+    - neve tzedek
+    - נווה צדק
+    - kerem hatemanim
+    - כרם התימנים
+    - lev hair
+    - לב העיר
+    - rothschild
+    - רוטשילד
+    - dizengoff
+    - דיזנגוף
+    - basel
+    - בזל
+    - old north
+    - צפון הישן
+    - new north
+    - צפון חדש
+    - ramat aviv
+    - רמת אביב
+  
+  # Number of rooms (use decimals for half rooms, e.g., 2.5)
+  rooms:
+    min: 2
+    max: 4
+  
+  # Type of listing: 'whole_apartment', 'roommates', or 'both'
+  listing_type: whole_apartment
+
+facebook:
+  # Facebook groups to monitor
+  # Add group URLs here - find them by going to the group and copying the URL
+  groups:
+    - name: "דירות להשכרה בתל אביב"
+      url: "https://www.facebook.com/groups/apartmentsrenttelaviv"
+    
+    - name: "דירות בתל אביב ללא תיווך"
+      url: "https://www.facebook.com/groups/teloavivrent"
+    
+    # Add more groups as needed:
+    # - name: "Group Name"
+    #   url: "https://www.facebook.com/groups/groupid"
+
+parsing:
+  # Use AI for ambiguous posts (costs ~$0.01-0.03 per post)
+  use_ai_fallback: true
+  
+  # Confidence threshold - below this, use AI parsing
+  regex_confidence_threshold: 0.6
+  
+  # OpenAI model for parsing
+  ai_model: "gpt-4o-mini"
+
+notifications:
+  # Include images in WhatsApp messages (if available)
+  include_images: true
+  
+  # Maximum messages per hour (to avoid spam)
+  max_per_hour: 20
+  
+  # Quiet hours - no notifications during these times
+  # quiet_hours:
+  #   start: "23:00"
+  #   end: "07:00"

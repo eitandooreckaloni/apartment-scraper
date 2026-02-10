@@ -1,0 +1,31 @@
+# Environment
+.env
+venv/
+.venv/
+
+# Data
+data/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Session data
+**/session/

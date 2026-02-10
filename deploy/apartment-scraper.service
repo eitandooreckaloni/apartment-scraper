@@ -1,0 +1,28 @@
+[Unit]
+Description=Tel Aviv Apartment Scraper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/apartment-scraper
+ExecStart=/opt/apartment-scraper/venv/bin/python -m src.main
+Restart=always
+RestartSec=10
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=apartment-scraper
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/apartment-scraper/data
+
+[Install]
+WantedBy=multi-user.target
