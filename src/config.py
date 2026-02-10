@@ -164,6 +164,11 @@ class Config:
         return self._config.get("facebook", {}).get("enabled", False)
     
     @property
+    def facebook_scraper_type(self) -> str:
+        """Facebook scraper type: 'library' (HTTP-based) or 'playwright' (browser automation)."""
+        return self._config.get("facebook", {}).get("scraper_type", "library")
+    
+    @property
     def facebook_groups(self) -> list[dict[str, str]]:
         return self._config["facebook"]["groups"]
     

@@ -95,8 +95,14 @@ facebook:
   # Facebook scraping is disabled by default (violates ToS, gets blocked)
   enabled: false
 
+  # Scraper type: "library" (lightweight HTTP-based) or "playwright" (browser automation)
+  # "library" is faster and less detectable, but requires exported cookies
+  # "playwright" is more robust but heavier and more detectable
+  scraper_type: "library"
+
   # Automatically join groups that you're not a member of
   # Set to false if you want to manually join groups first
+  # Note: Only works with "playwright" scraper_type
   auto_join_groups: true
 
   # Facebook groups to monitor

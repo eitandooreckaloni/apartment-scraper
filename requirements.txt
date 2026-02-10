@@ -1,6 +1,7 @@
 # Web scraping
 playwright==1.41.0
 beautifulsoup4==4.12.3
+facebook-scraper==0.2.59
 
 # Database
 sqlalchemy==2.0.25
