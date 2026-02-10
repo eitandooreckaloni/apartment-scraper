@@ -116,10 +116,15 @@ class Config:
         """Get bonus feature keywords to look for (e.g., roof, balcony)."""
         return self._config["criteria"].get("bonus_features", [])
     
-    # Facebook groups
+    # Facebook settings
     @property
     def facebook_groups(self) -> list[dict[str, str]]:
         return self._config["facebook"]["groups"]
+    
+    @property
+    def auto_join_groups(self) -> bool:
+        """Whether to automatically join Facebook groups that the user isn't a member of."""
+        return self._config["facebook"].get("auto_join_groups", True)
     
     # Parsing settings
     @property

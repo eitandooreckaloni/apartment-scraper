@@ -72,6 +72,10 @@ criteria:
     - פנטהאוז
 
 facebook:
+  # Automatically join groups that you're not a member of
+  # Set to false if you want to manually join groups first
+  auto_join_groups: true
+  
   # Facebook groups to monitor
   # Add group URLs here - find them by going to the group and copying the URL
   groups:
