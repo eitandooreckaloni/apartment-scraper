@@ -13,17 +13,9 @@ import structlog
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from ..config import config
+from ..logging_config import print_status, print_error, print_warning, print_success
 
 logger = structlog.get_logger()
-
-# #region agent log
-import time as _dbg_time
-_DBG_LOG_PATH = "/Users/eitan/Documents/git-repos/apartment-scraper/.cursor/debug.log"
-def _dbg_log(loc, msg, data=None, hyp=None):
-    import json as _j
-    payload = {"location": loc, "message": msg, "data": data or {}, "hypothesisId": hyp, "timestamp": int(_dbg_time.time()*1000)}
-    with open(_DBG_LOG_PATH, "a") as f: f.write(_j.dumps(payload) + "\n")
-# #endregion
 
 
 @dataclass
@@ -58,6 +50,7 @@ class FacebookScraper:
     
     async def start(self):
         """Start the browser and load session if available."""
+        print_status("Opening browser...")
         logger.info("Starting Facebook scraper")
         
         playwright = await async_playwright().start()
@@ -73,6 +66,7 @@ class FacebookScraper:
         storage_state = None
         
         if session_path.exists():
+            print_status("Loading saved Facebook session...")
             logger.info("Loading existing session")
             try:
                 storage_state = str(session_path)
@@ -96,40 +90,26 @@ class FacebookScraper:
     async def _check_login_status(self) -> bool:
         """Check if we're logged into Facebook."""
         try:
-            # #region agent log
-            _dbg_log("facebook.py:_check_login_status:start", "Starting login status check", {"url": "https://www.facebook.com"}, "B")
-            # #endregion
+            print_status("Checking Facebook login...")
             await self.page.goto("https://www.facebook.com", wait_until="networkidle")
             await self._random_delay(2, 4)
-            
-            # #region agent log
-            current_url = self.page.url
-            page_title = await self.page.title()
-            _dbg_log("facebook.py:_check_login_status:after_nav", "After navigation to facebook.com", {"current_url": current_url, "page_title": page_title}, "B")
-            # #endregion
             
             # Check for login form or user menu
             login_form = await self.page.query_selector('input[name="email"]')
             if login_form:
                 self._logged_in = False
+                print_warning("Not logged into Facebook - please authenticate first")
                 logger.info("Not logged in - need to authenticate")
-                # #region agent log
-                _dbg_log("facebook.py:_check_login_status:not_logged_in", "Login form detected - not logged in", {}, "B")
-                # #endregion
                 return False
             
             self._logged_in = True
+            print_success("Logged into Facebook")
             logger.info("Already logged in")
-            # #region agent log
-            _dbg_log("facebook.py:_check_login_status:logged_in", "No login form - appears logged in", {}, "B")
-            # #endregion
             return True
             
         except Exception as e:
+            print_error(f"Could not check login status: {str(e)}")
             logger.error("Error checking login status", error=str(e))
-            # #region agent log
-            _dbg_log("facebook.py:_check_login_status:error", "Error during login check", {"error": str(e)}, "B")
-            # #endregion
             return False
     
     async def login(self) -> bool:
@@ -466,20 +446,24 @@ class FacebookScraper:
             - "failed" - Could not join
             - "skipped" - Auto-join disabled, not a member
         """
+        print_status("Checking group memberships...")
         logger.info("Ensuring group memberships for all configured groups")
         
         if not self._logged_in:
             if not await self.login():
+                print_error("Cannot check memberships - not logged in")
                 logger.error("Cannot ensure memberships - not logged in")
                 return {}
         
         auto_join = getattr(config, 'auto_join_groups', True)
         group_statuses = {}
+        total_groups = len(config.facebook_groups)
         
-        for group in config.facebook_groups:
+        for i, group in enumerate(config.facebook_groups, 1):
             group_url = group["url"]
             group_name = group["name"]
             
+            print_status(f"  [{i}/{total_groups}] {group_name}")
             logger.info("Processing group", group_name=group_name)
             
             # Check current membership status
@@ -491,6 +475,7 @@ class FacebookScraper:
             
             elif status == "pending":
                 group_statuses[group_url] = "pending"
+                print_warning(f"      Waiting for admin approval")
                 logger.info("Membership pending approval", group_name=group_name)
             
             elif status == "not_member":
@@ -500,12 +485,15 @@ class FacebookScraper:
                     
                     if join_result == "joined":
                         group_statuses[group_url] = "member"
+                        print_success(f"      Joined!")
                     elif join_result == "pending":
                         group_statuses[group_url] = "pending"
+                        print_warning(f"      Join request sent")
                     elif join_result == "already_member":
                         group_statuses[group_url] = "member"
                     else:
                         group_statuses[group_url] = "failed"
+                        print_warning(f"      Could not join")
                 else:
                     group_statuses[group_url] = "skipped"
                     logger.info("Auto-join disabled, skipping", group_name=group_name)
@@ -517,10 +505,18 @@ class FacebookScraper:
             # Delay between groups to avoid rate limiting
             await self._random_delay()
         
-        # Log summary
+        # Human-friendly summary
         members = sum(1 for s in group_statuses.values() if s == "member")
         pending = sum(1 for s in group_statuses.values() if s == "pending")
         failed = sum(1 for s in group_statuses.values() if s in ("failed", "skipped"))
+        
+        print("")
+        print_status(f"Group access: {members}/{total_groups} groups ready")
+        if pending > 0:
+            print_warning(f"  {pending} groups pending admin approval")
+        if failed > 0:
+            print_warning(f"  {failed} groups not accessible")
+        print("")
         
         logger.info(
             "Group membership summary",
@@ -534,60 +530,26 @@ class FacebookScraper:
     
     async def scrape_group(self, group_url: str, group_name: str) -> list[RawPost]:
         """Scrape posts from a Facebook group."""
+        print_status(f"Scraping: {group_name}")
         logger.info("Scraping group", group_name=group_name)
         
         if not self._logged_in:
             if not await self.login():
+                print_error("Cannot scrape - not logged in")
                 logger.error("Cannot scrape - not logged in")
                 return []
         
         posts = []
         
         try:
-            # #region agent log
-            _dbg_log("facebook.py:scrape_group:before_nav", "About to navigate to group", {"group_url": group_url, "group_name": group_name, "logged_in": self._logged_in}, "A,E")
-            nav_start = _dbg_time.time()
-            # #endregion
-            
             # Navigate to group - use domcontentloaded instead of networkidle to avoid timeout
-            # Then wait for network to settle separately with a shorter timeout
             try:
                 await self.page.goto(group_url, wait_until="domcontentloaded", timeout=30000)
-                # #region agent log
-                after_dom = _dbg_time.time()
-                _dbg_log("facebook.py:scrape_group:dom_loaded", "DOM content loaded", {"elapsed_ms": int((after_dom - nav_start)*1000), "current_url": self.page.url}, "A")
-                # #endregion
                 
-                # Now wait a bit for dynamic content, but don't wait for full networkidle
+                # Wait for dynamic content to load
                 await asyncio.sleep(3)
                 
-                # #region agent log
-                current_url = self.page.url
-                page_title = await self.page.title()
-                _dbg_log("facebook.py:scrape_group:after_sleep", "After 3s wait", {"current_url": current_url, "page_title": page_title, "total_elapsed_ms": int((_dbg_time.time() - nav_start)*1000)}, "A,B,C")
-                # #endregion
-                
-                # Check for blocking dialogs/modals (cookie consent, login redirect, captcha)
-                # #region agent log
-                dialog_selectors = [
-                    '[data-testid="cookie-policy-manage-dialog"]',
-                    '[role="dialog"]',
-                    'input[name="email"]',  # Login form
-                    '[id*="captcha"]',
-                    '[id*="checkpoint"]'
-                ]
-                found_dialogs = []
-                for sel in dialog_selectors:
-                    elem = await self.page.query_selector(sel)
-                    if elem:
-                        found_dialogs.append(sel)
-                _dbg_log("facebook.py:scrape_group:dialog_check", "Checked for blocking elements", {"found_dialogs": found_dialogs, "current_url": current_url}, "C,D")
-                # #endregion
-                
             except Exception as nav_error:
-                # #region agent log
-                _dbg_log("facebook.py:scrape_group:nav_error", "Navigation error", {"error": str(nav_error), "type": type(nav_error).__name__, "elapsed_ms": int((_dbg_time.time() - nav_start)*1000)}, "A,E")
-                # #endregion
                 raise
             
             await self._random_delay()
@@ -610,16 +572,15 @@ class FacebookScraper:
                     logger.warning("Failed to extract post", error=str(e))
                     continue
             
+            print_status(f"  Found {len(posts)} posts")
             logger.info(f"Extracted {len(posts)} posts from {group_name}")
-            # #region agent log
-            _dbg_log("facebook.py:scrape_group:success", "Successfully extracted posts", {"group_name": group_name, "post_count": len(posts)}, "A")
-            # #endregion
             
         except Exception as e:
+            if "Timeout" in str(e):
+                print_warning(f"  Timeout - Facebook may be slow")
+            else:
+                print_error(f"  Failed: {str(e)[:50]}")
             logger.error("Error scraping group", group_name=group_name, error=str(e))
-            # #region agent log
-            _dbg_log("facebook.py:scrape_group:error", "Error scraping group", {"group_name": group_name, "error": str(e), "error_type": type(e).__name__}, "A,B,C,D,E")
-            # #endregion
         
         return posts
     
@@ -711,8 +672,11 @@ class FacebookScraper:
         # Now scrape only the groups we're members of
         groups_scraped = 0
         groups_skipped = 0
+        total_groups = len(config.facebook_groups)
         
-        for group in config.facebook_groups:
+        print_status(f"Scraping {total_groups} groups...")
+        
+        for i, group in enumerate(config.facebook_groups, 1):
             group_url = group["url"]
             group_name = group["name"]
             
@@ -726,6 +690,7 @@ class FacebookScraper:
                 await self._random_delay()  # Delay between groups
             
             elif status == "pending":
+                print_warning(f"Skipping: {group_name} (pending approval)")
                 logger.warning(
                     "Skipping group - membership pending approval",
                     group_name=group_name
@@ -733,6 +698,7 @@ class FacebookScraper:
                 groups_skipped += 1
             
             elif status in ("failed", "skipped"):
+                print_warning(f"Skipping: {group_name} (not a member)")
                 logger.warning(
                     "Skipping group - not a member",
                     group_name=group_name,
@@ -766,6 +732,7 @@ class FacebookScraper:
             await self._save_session()
         if self.browser:
             await self.browser.close()
+        print_status("Browser closed")
         logger.info("Facebook scraper stopped")
 
 

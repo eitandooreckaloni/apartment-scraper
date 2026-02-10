@@ -5,7 +5,6 @@ import signal
 import sys
 from datetime import datetime
 
-import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -17,27 +16,13 @@ from .scraper.facebook import FacebookScraper, RawPost
 from .parser.hybrid import parse_listing
 from .filters.criteria import matches_criteria, should_notify
 from .notifier.whatsapp import send_listing_notification
-
-# Configure structured logging
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.dev.ConsoleRenderer()
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
+from .logging_config import (
+    setup_logging, get_logger,
+    print_status, print_success, print_error, print_warning
 )
 
-logger = structlog.get_logger()
+# Configure dual logging (human console + debug file)
+logger = setup_logging()
 
 
 async def process_post(post: RawPost) -> bool:
@@ -86,6 +71,11 @@ async def process_post(post: RawPost) -> bool:
         
         # Send notification if appropriate
         if should_notify(parsed, filter_result):
+            # Human-friendly notification message
+            location_str = parsed.location or "Unknown location"
+            price_str = f"{parsed.price:,} NIS" if parsed.price else "Unknown price"
+            print_success(f"Match found! {location_str} - {price_str}")
+            
             logger.info(
                 "Sending notification for matching listing",
                 post_id=post.post_id,
@@ -110,34 +100,53 @@ async def process_post(post: RawPost) -> bool:
 
 async def run_scrape_job():
     """Run a single scrape job."""
+    print_status("Starting scan...")
     logger.info("Starting scrape job")
     start_time = datetime.utcnow()
     
     scraper = FacebookScraper()
     total_posts = 0
     notifications_sent = 0
+    new_listings = 0
     
     try:
         await scraper.start()
         posts = await scraper.scrape_all_groups()
         total_posts = len(posts)
         
-        logger.info(f"Scraped {total_posts} posts, processing...")
-        
-        for post in posts:
-            try:
-                if await process_post(post):
-                    notifications_sent += 1
-            except Exception as e:
-                logger.error("Error processing post", error=str(e), post_id=post.post_id)
-                continue
+        if total_posts > 0:
+            print_status(f"Processing {total_posts} posts...")
+            logger.info(f"Scraped {total_posts} posts, processing...")
+            
+            for i, post in enumerate(posts, 1):
+                try:
+                    if await process_post(post):
+                        notifications_sent += 1
+                        new_listings += 1
+                except Exception as e:
+                    logger.error("Error processing post", error=str(e), post_id=post.post_id)
+                    continue
+        else:
+            print_warning("No posts found in any groups")
         
     except Exception as e:
+        print_error(f"Scan failed: {str(e)}")
         logger.error("Scrape job failed", error=str(e))
     finally:
         await scraper.stop()
     
     elapsed = (datetime.utcnow() - start_time).total_seconds()
+    
+    # Human-friendly summary
+    print("")
+    print_status(f"Scan complete in {elapsed:.0f} seconds")
+    print_status(f"  Posts checked: {total_posts}")
+    if notifications_sent > 0:
+        print_success(f"  Notifications sent: {notifications_sent}")
+    else:
+        print_status(f"  Notifications sent: 0")
+    print("")
+    
     logger.info(
         "Scrape job complete",
         total_posts=total_posts,
@@ -165,6 +174,20 @@ def setup_scheduler() -> AsyncIOScheduler:
 
 async def main():
     """Main entry point."""
+    # Clear welcome banner
+    print("")
+    print("=" * 50)
+    print("  Apartment Scraper")
+    print("=" * 50)
+    print("")
+    
+    # Show configuration in human-friendly format
+    print_status(f"Budget: {config.budget_min:,} - {config.budget_max:,} NIS")
+    print_status(f"Rooms: {config.rooms_min} - {config.rooms_max}")
+    print_status(f"Monitoring {len(config.facebook_groups)} Facebook groups")
+    print_status(f"Will scan every {config.scraper_interval_minutes} minutes")
+    print("")
+    
     logger.info("Starting Apartment Scraper")
     logger.info(f"Scrape interval: {config.scraper_interval_minutes} minutes")
     logger.info(f"Budget range: {config.budget_min} - {config.budget_max} NIS")
@@ -173,24 +196,37 @@ async def main():
     
     # Initialize database
     init_db()
+    print_status("Database ready")
     logger.info("Database initialized")
     
     # Set up scheduler
     scheduler = setup_scheduler()
     scheduler.start()
+    print_status("Scheduler started")
     logger.info("Scheduler started")
     
     # Run initial scrape
+    print("")
+    print_status("Running initial scan...")
     logger.info("Running initial scrape...")
     await run_scrape_job()
+    
+    # Show next run info
+    next_run = datetime.now().strftime("%H:%M")
+    print_status(f"Next scan in {config.scraper_interval_minutes} minutes")
+    print_status("Press Ctrl+C to stop")
+    print("")
     
     # Keep running
     try:
         while True:
             await asyncio.sleep(60)
     except (KeyboardInterrupt, SystemExit):
+        print("")
+        print_status("Shutting down...")
         logger.info("Shutting down...")
         scheduler.shutdown()
+        print_status("Goodbye!")
 
 
 def run():
