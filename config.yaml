@@ -4,86 +4,85 @@
 scraper:
   # How often to check for new posts (in minutes)
   interval_minutes: 7
-  
+
   # Random delay range between actions (seconds) - helps avoid detection
   min_delay: 3
   max_delay: 8
-  
+
   # Number of posts to fetch per group per run
   posts_per_group: 20
-  
+
   # Path to store browser session/cookies
   session_path: data/session
 
 criteria:
   # Budget range in NIS per month
   budget:
-    min: 3000
+    min: 6300
     max: 7500
-  
+
   # Tel Aviv neighborhoods to look for (Hebrew and English)
   # Focused on Lev Tel Aviv - south of Bugrashov
   locations:
-    - rothschild
-    - רוטשילד
-    - kerem hatemanim
-    - כרם התימנים
-    - הכרם
-    - shenkin
-    - שנקין
-    - lev hair
-    - לב העיר
-    - lev tel aviv
-    - לב תל אביב
-    - neve tzedek
-    - נווה צדק
-    - florentin
-    - פלורנטין
-    - carmel market
-    - שוק הכרמל
-    - allenby
-    - אלנבי
-    - nachalat binyamin
-    - נחלת בנימין
-  
+  - rothschild
+  - רוטשילד
+  - kerem hatemanim
+  - כרם התימנים
+  - הכרם
+  - shenkin
+  - שנקין
+  - lev hair
+  - לב העיר
+  - lev tel aviv
+  - לב תל אביב
+  - neve tzedek
+  - נווה צדק
+  - florentin
+  - פלורנטין
+  - carmel market
+  - שוק הכרמל
+  - allenby
+  - אלנבי
+  - nachalat binyamin
+  - נחלת בנימין
+
   # Number of rooms (use decimals for half rooms, e.g., 2.5)
   rooms:
     min: 2
     max: 3
-  
+
   # Type of listing: 'whole_apartment', 'roommates', or 'both'
   listing_type: whole_apartment
-  
+
   # Bonus features - apartments with these get highlighted as extra exciting
   # (Hebrew and English keywords to look for)
   bonus_features:
-    - roof
-    - גג
-    - rooftop
-    - balcony
-    - מרפסת
-    - big windows
-    - חלונות גדולים
-    - windows
-    - חלונות
-    - terrace
-    - טרסה
-    - penthouse
-    - פנטהאוז
+  - roof
+  - גג
+  - rooftop
+  - balcony
+  - מרפסת
+  - big windows
+  - חלונות גדולים
+  - windows
+  - חלונות
+  - terrace
+  - טרסה
+  - penthouse
+  - פנטהאוז
 
 yad2:
   # Enable Yad2 scraping (recommended - legal and structured data)
   enabled: true
-  
+
   # City codes (5000 = Tel Aviv, 3000 = Jerusalem, 4000 = Haifa)
   # See full list at https://www.yad2.co.il
   cities:
-    - 5000  # Tel Aviv
-  
+  - 5000 # Tel Aviv
   # Property type filter (optional)
   # Options: apartment, studio, penthouse, garden_apartment, townhouse, duplex
   # property_type: apartment
-  
+
   # Additional filters (these override the global criteria if set)
   # price:
   #   min: 3000
@@ -95,41 +94,39 @@ yad2:
 facebook:
   # Facebook scraping is disabled by default (violates ToS, gets blocked)
   enabled: false
-  
+
   # Automatically join groups that you're not a member of
   # Set to false if you want to manually join groups first
   auto_join_groups: true
-  
+
   # Facebook groups to monitor
   # Add group URLs here - find them by going to the group and copying the URL
   groups:
-    - name: "דירות להשכרה בתל אביב"
-      url: "https://www.facebook.com/groups/305724686290054"
-    
-    - name: "Looking for an Apartment in Tel Aviv"
-      url: "https://www.facebook.com/groups/319568031393654"
-    
-    # Add more groups as needed:
-    # - name: "Group Name"
-    #   url: "https://www.facebook.com/groups/groupid"
+  - name: "דירות להשכרה בתל אביב"
+    url: "https://www.facebook.com/groups/305724686290054"
+
+  - name: "Looking for an Apartment in Tel Aviv"
+    url: "https://www.facebook.com/groups/319568031393654"
+  # Add more groups as needed:
+  # - name: "Group Name"
+  #   url: "https://www.facebook.com/groups/groupid"
 
 parsing:
   # Use AI for ambiguous posts (costs ~$0.01-0.03 per post)
   use_ai_fallback: true
-  
+
   # Confidence threshold - below this, use AI parsing
   regex_confidence_threshold: 0.6
-  
+
   # OpenAI model for parsing
   ai_model: "gpt-4o-mini"
 
 notifications:
   # Include images in WhatsApp messages (if available)
   include_images: true
-  
+
   # Maximum messages per hour (to avoid spam)
   max_per_hour: 20
-  
   # Quiet hours - no notifications during these times
   # quiet_hours:
   #   start: "23:00"
