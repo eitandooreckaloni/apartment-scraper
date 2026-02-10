@@ -162,6 +162,27 @@ class WhatsAppNotifier:
                 session.add(log)
             
             return False
+    
+    def send_test_message(self) -> tuple[bool, str]:
+        """Send a test message to verify WhatsApp connection.
+        
+        Returns:
+            Tuple of (success, message) where message contains details or error
+        """
+        if not self.client:
+            return False, "Twilio client not initialized - check credentials"
+        
+        try:
+            message = self.client.messages.create(
+                body="🔧 Apartment Scraper - WhatsApp connection test successful!",
+                from_=config.twilio_whatsapp_from,
+                to=config.twilio_whatsapp_to
+            )
+            logger.info("Test message sent", message_sid=message.sid)
+            return True, f"Test message sent (SID: {message.sid})"
+        except TwilioRestException as e:
+            logger.error("Failed to send test message", error=str(e))
+            return False, f"Failed to send: {e}"
 
 
 # Global notifier instance
