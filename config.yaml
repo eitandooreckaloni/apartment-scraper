@@ -3,7 +3,7 @@
 
 scraper:
   # How often to check for new posts (in minutes)
-  interval_minutes: 7
+  interval_minutes: 3
 
   # Random delay range between actions (seconds) - helps avoid detection
   min_delay: 3
