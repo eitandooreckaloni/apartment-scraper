@@ -22,7 +22,7 @@ python-dotenv==1.0.1
 # Utilities
 httpx==0.26.0
 fuzzywuzzy==0.18.0
-python-Levenshtein==0.24.2
+python-Levenshtein==0.26.1
 
 # Logging
 structlog==24.1.0
